@@ -1,0 +1,106 @@
+org: raetseltouren
+app: lockedtreasurehuntbot
+service: backoffice-website
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  stage: ${opt:stage}
+  region: eu-central-1
+
+custom:
+  s3BucketName: ${opt:stage}.backoffice.freizeit-raetseltouren.de
+  domainName: freizeit-raetseltouren.de
+
+resources:  
+  Resources:
+    WebsiteBucket:
+      Type: AWS::S3::Bucket
+      DeletionPolicy: Retain
+      Properties:
+        BucketName: ${self:custom.s3BucketName}
+        # AccessControl: PublicRead
+        WebsiteConfiguration:
+          IndexDocument: index.html
+          ErrorDocument: index.html
+    # Specifying the policies to make sure all files inside the Bucket are avaialble to CloudFront
+    WebsiteBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      DependsOn:
+        - WebsiteBucket
+        - CloudFrontOriginAccessIdentity
+      Properties:
+        Bucket:
+          Ref: WebsiteBucket
+        PolicyDocument:
+          Statement:
+            - Sid: PublicReadGetObject
+              Effect: Allow
+              Principal:
+                AWS:
+                  Fn::Join:
+                    - ' '
+                    - - 'arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity'
+                      - !Ref CloudFrontOriginAccessIdentity
+              Action:
+                - s3:GetObject
+              Resource:
+                - Fn::Join: [
+                    '', [
+                      'arn:aws:s3:::',
+                      {
+                        'Ref': 'WebsiteBucket'
+                      },
+                      '/*'
+                    ]
+                  ]
+    
+    CloudFrontOriginAccessIdentity:
+      Type: 'AWS::CloudFront::CloudFrontOriginAccessIdentity'
+      Properties:
+        CloudFrontOriginAccessIdentityConfig:
+          Comment: '${opt:stage}-backoffice-oai'
+    ## Specifying the CloudFront Distribution to server your Web Application
+    CloudFrontDistribution:
+      Type: AWS::CloudFront::Distribution
+      DeletionPolicy: Retain
+      DependsOn:
+        - WebsiteBucket
+        - CloudFrontOriginAccessIdentity
+      Properties:
+        DistributionConfig:
+          Origins:
+            - DomainName: '${self:custom.s3BucketName}.s3.amazonaws.com'
+              OriginPath: ''
+              Id: S3BucketOrigin
+              S3OriginConfig:
+                OriginAccessIdentity:
+                  Fn::Join:
+                    - ''
+                    - - 'origin-access-identity/cloudfront/'
+                      - !Ref CloudFrontOriginAccessIdentity
+          Comment: 'CloudFront origin for ${opt:stage} ${self:custom.domainName}'
+          DefaultCacheBehavior:
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            TargetOriginId: S3BucketOrigin
+            Compress: true
+            ForwardedValues:
+              QueryString: 'false'
+              Cookies:
+                Forward: none
+            ViewerProtocolPolicy: redirect-to-https
+          DefaultRootObject: index.html
+          Enabled: 'true'
+          HttpVersion: 'http2'
+          PriceClass: 'PriceClass_100'
+          ViewerCertificate:
+            CloudFrontDefaultCertificate: 'true'
+
+  ## In order to print out the hosted domain via `serverless info` we need to define the DomainName output for CloudFormation
+  Outputs:
+    CloudFrontDistributionOutput:
+      Value:
+        'Fn::GetAtt': [ CloudFrontDistribution, DomainName ]
