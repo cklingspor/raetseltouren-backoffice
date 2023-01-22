@@ -4,9 +4,9 @@ import { createTheme } from "@mui/material/styles";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { routes as appRoutes } from "./routes";
 import Footer from "./components/Footer";
-import ResponsiveAppBar from './components/ResponsiveAppBar';
+import ResponsiveAppBar from "./components/ResponsiveAppBar";
 
-import { withAuthenticator } from '@aws-amplify/ui-react';
+import { withAuthenticator } from "@aws-amplify/ui-react";
 
 function App() {
   // define theme
